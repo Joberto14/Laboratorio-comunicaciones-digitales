@@ -1,65 +1,70 @@
-function simularCosenoAlzado()
-    % simularcosenoalzado: realiza la generacion de una señal digital 
-    % nrz-l, la filtra con un coseno alzado para diferentes roll-off,
+function cosenoAlzado()
+    % cosenoAlzado: realiza la generación de una señal digital 
+    % NRZ-L, la filtra con un coseno alzado para diferentes roll-off,
     % añade ruido y presenta un diagrama de ojo para cada caso
 
-    % inicializacion del entorno
-    limpiarAmbiente();
+    resetearEntorno();
 
-    %% parametros de la simulacion
-    tasa_bps = 1;           % velocidad de bits (bps)
-    cant_bits = 104;        % cantidad de bits a transmitir
-    valor_amp = 1;          % amplitud de la señal nrz-l
-    fact_oversample = 40;   % cantidad de muestras por bit
-    snr_dB = 30;            % relacion señal/ruido para el canal (db)
-    
-    % generacion de la señal nrz-l
-    [senalNRZ, fs] = generarSenal(tasa_bps, cant_bits, valor_amp, fact_oversample);
+    % Configuración de parámetros
+    config = obtenerParametros();
 
-    %% parametros del filtro coseno alzado
-    coef_rolloff = [0, 0.25, 0.75, 1];  % diferentes roll-off
-    duracion_sim = 6;                   % extension del filtro en simbolos
+    % Generación de la señal NRZ-L
+    [senalNRZ, fs] = generarNRZL(config);
 
-    %% procesamiento y visualizacion
-    for i = 1:length(coef_rolloff)
-        beta = coef_rolloff(i);
-        filtroRC = crearFiltroCoseno(beta, duracion_sim, fact_oversample);
-        salidaFiltrada = filtrarSenal(senalNRZ, filtroRC);
-        canalRuido = awgn(salidaFiltrada, snr_dB, 'measured');
-        mostrarDiagramaOjo(canalRuido, 2 * fact_oversample, beta);  % ojo de dos periodos
-    end
+    % Procesamiento y visualización
+    procesarYVisualizar(config, senalNRZ);
 end
 
-%% funciones auxiliares
-function limpiarAmbiente()
+%% Funciones auxiliares
+function resetearEntorno()
     clc;
     clear;
     close all;
 end
 
-function [senal, fs] = generarSenal(tasa, numBits, amp, oversample)
-    % generarsenal: crea una señal digital nrz-l a partir de una secuencia
-    % aleatoria de bits, aplicada la tecnica de sobremuestreo
-    fs = tasa * oversample;
-    datos = randi([0 1], 1, numBits);
-    senal = amp * repelem(2 * datos - 1, oversample);
+function config = obtenerParametros()
+    % obtenerParametros: define los parámetros necesarios para la simulación
+    config = struct( ...
+        'tasa_bps', 1, ...
+        'cant_bits', 104, ...
+        'valor_amp', 1, ...
+        'fact_oversample', 40, ...
+        'snr_dB', 30, ...
+        'coef_rolloff', [0, 0.25, 0.75, 1], ...
+        'duracion_sim', 6 ...
+    );
 end
 
-function filtro = crearFiltroCoseno(beta, span, oversample)
-    % crearfiltrocoseno: diseña un filtro coseno alzado con los parametros
-    % indicados
-    filtro = rcosdesign(beta, span, oversample, 'normal');
+function [senal, fs] = generarNRZL(config)
+    % generarNRZL: crea una señal digital NRZ-L con sobremuestreo
+    fs = config.tasa_bps * config.fact_oversample;
+    bits = randi([0 1], 1, config.cant_bits);
+    senal = config.valor_amp * repelem(2 * bits - 1, config.fact_oversample);
 end
 
-function senalOut = filtrarSenal(senalIn, filtro)
-    % filtrarsenal: aplica un filtro a la señal de entrada mediante convolucion
-    senalOut = conv(senalIn, filtro, 'same');
+function procesarYVisualizar(config, senalNRZ)
+    % procesarYVisualizar: aplica filtros RC y genera diagramas de ojo
+    for beta = config.coef_rolloff
+        senalRuidosa = filtrarYAnadirRuido(senalNRZ, beta, config);
+        graficarOjo(senalRuidosa, 2 * config.fact_oversample, beta);
+    end
 end
 
-function mostrarDiagramaOjo(senal, muestrasOjo, beta)
-    % mostrardiagramaojo: genera el diagrama de ojo de la señal procesada
-    % ojo de dos periodos
+function senalRuidosa = filtrarYAnadirRuido(senalNRZ, beta, config)
+    % filtrarYAnadirRuido: aplica el filtro RC y añade ruido a la señal
+    h = disenarFiltroRC(beta, config.duracion_sim, config.fact_oversample);
+    senalFiltrada = conv(senalNRZ, h, 'same');
+    senalRuidosa = awgn(senalFiltrada, config.snr_dB, 'measured');
+end
+
+function h = disenarFiltroRC(beta, span, sps)
+    % disenarFiltroRC: diseño del filtro coseno alzado
+    h = rcosdesign(beta, span, sps, 'normal');
+end
+
+function graficarOjo(senal, muestrasSimbolo, beta)
+    % graficarOjo: muestra el diagrama de ojo
     figure;
-    eyediagram(senal, muestrasOjo);
-    title(sprintf('diagrama de ojo (beta = %.2f)', beta));
+    eyediagram(senal, muestrasSimbolo);
+    title(sprintf('Diagrama de ojo (roll-off = %.2f)', beta));
 end
